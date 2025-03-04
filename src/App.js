@@ -1,36 +1,147 @@
 import './App.css';
-import React, {
-  useState,
-  useEffect
-} from 'react';
+import { createStyles, makeStyles } from "@mui/styles";
+import Paper from '@mui/material/Paper';
+import TextField from '@mui/material/TextField';
+import SendIcon from '@mui/icons-material/Send';
+import Button from '@mui/material/Button';
+import React, { useState, useEffect } from 'react';
+import { Message } from './components/message';
+
+
+//classes importadas do codeSandbox
+const useStyles = makeStyles(() =>
+  createStyles({
+    paper: {
+      width: "80vw",
+      height: "80vh",
+      maxWidth: "500px",
+      maxHeight: "700px",
+      display: "flex",
+      alignItems: "center",
+      flexDirection: "column",
+      position: "relative"
+    },
+    paper2: {
+      width: "80vw",
+      maxWidth: "500px",
+      display: "flex",
+      alignItems: "center",
+      flexDirection: "column",
+      position: "relative"
+    },
+    container: {
+      width: "100vw",
+      height: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    messagesBody: {
+      width: "calc(100% - 20px)",
+      margin: 10,
+      overflowY: "scroll",
+      height: "calc(100% - 80px)"
+    },
+    wrapForm: {
+      display: "flex",
+      justifyContent: "center",
+      width: "95%",
+      margin: "auto",
+    },
+    wrapText: {
+      width: "100%"
+    },
+    button: {
+      marginLeft: 10
+    }
+  })
+);
 
 function App() {
-  const [message, setMessage] = useState("");
-  const [ws, setWs] = useState(null);
-  const [list, setList] = useState([]);
+  const classes = useStyles();
+  const [message, setMessage] = useState({
+    message: "",
+    timestamp: "10:30 AM",
+    photoURL: "https://example.com/user.jpg",
+    displayName: "user",
+    isUser:"False"
+  });
 
+  //variavel para o websocket e para a lista de mensagens.
+  const [ws, setWs] = useState(null);
+  const [listMessages, setListMessages] = useState([]);
+
+  // id do utilizador no hub
+  const [idHub, setIdHub] = useState("");
+
+
+  /**
+   * 1ºpasso: Abrir conexão com o websocket.
+   * 2ºpasso: Forçar a conexão.
+   * 3ºpasso: Filtro das mensagens do tipo 1 bem como a obtenção do user id respetivo ao Hub.
+   */
   useEffect(() => {
-    if(ws == null){
+    if (ws == null) {
       const websocket = new WebSocket('wss://jsamsignal.azurewebsites.net/signal');
-      //const websocket = new WebSocket('wss://localhost:7296/signal');
-      
       websocket.onopen = () => {
         console.log('WebSocket is connected');
+        websocket.send('{"protocol":"json","version":1}');
       };
-  
+
       websocket.onmessage = (evt) => {
-        // Create a new array instead of mutating the existing one
-        setList(prevList => [...prevList, evt.data]);
-      };
+        const data = evt.data.trim();
+
+        try {
+          const messages = data.split(/\u001e+/).filter(msg => msg.trim().length > 0);
+
+          messages.forEach((message) => {
+            const jsonData = JSON.parse(message);
+
+            if (jsonData.type === 1 && jsonData.target === "OnConnectedAsyncPrivate") {
+              const extractedId = jsonData.arguments[0].split(" ").pop();
+              setIdHub(extractedId);
+              console.log("ID do utilizador:", extractedId);
+            }
+
+            if (jsonData.type === 1 && jsonData.target === "BroadCast") {
+              
+              const [userId, msg] = jsonData.arguments[0].split(": ");
+              
+              console.log(idHub)
+              console.log(userId)
+              const isUser = userId === idHub;
+
+              const newMessage = {
+                message: msg,
+                timestamp: new Date().toLocaleTimeString(),
+                photoURL: "https://example.com/user.jpg",
+                displayName: userId,
+                isUser: isUser
+              };
+
+              setListMessages(prevMessages => {
+                const messageExists = prevMessages.some(existingMessage => 
+                  existingMessage.message === newMessage.message &&
+                  existingMessage.timestamp === newMessage.timestamp
+                );
+                if (!messageExists) {
+                  return [...prevMessages, newMessage];  // Add new message if it doesn't exist
+                }
+                return prevMessages;  // Return the existing list if duplicate found
+              });
       
+            }
+
+          });
+
+        } catch (error) {
+          console.error("Erro ao processar mensagem WebSocket:", error, "Mensagem recebida:", data);
+        }
+      };
+
       setWs(websocket);
     }
   }, []);
-
-  // This useEffect will now properly log the updated list
-  useEffect(() => {
-    console.log(list);
-  }, [list]);
 
   const handleDisconnect = () => {
     ws.close();
@@ -41,27 +152,66 @@ function App() {
   }
 
   const handleSendMessage = () => {
-    ws.send(' {"arguments":["ola tudo bem?"],"invocationId":"0","target":"BroadCast","type":1}');
+
+
+    ws.send(` {"arguments":["${message.message}"],"invocationId":"0","target":"BroadCast","type":1}`);
+
+    setMessage(prevState => ({
+      ...prevState,
+      message: ""
+    }));
+
   }
 
-  // No need for two separate list rendering variables
-  const listItems = list.map((item, index) =>
-    <li key={index}>{item}</li>
-  );
+  const listItems = listMessages.map((item, index) => (
+    <Message
+      key={index}
+      message={item.message}
+      timestamp={item.timestamp}
+      photoURL={item.photoURL}
+      displayName={item.displayName}
+      isUser={item.isUser}
+    />
+  ));
 
   return (
     <div className="App">
-      <button onClick={handleShake}>
-        Shake shake
-      </button>
-
-      <button onClick={handleSendMessage}>
-        message
-      </button>
-
-      <ul>
-        {listItems}
-      </ul>
+      <div className={classes.container}>
+        <Paper className={classes.paper} elevation={2}>
+          <Paper id="style-1" className={classes.messagesBody}>
+            <Message
+              message="Ola, tudo bem?"
+              timestamp="10:30 AM"
+              photoURL="https://example.com/user.jpg"
+              displayName="João"
+              isUser={false}
+            />
+            <Message
+              message="Tudo e contigo!"
+              timestamp="10:31 AM"
+              isUser={true}
+            />
+            {listItems}
+          </Paper>
+          <form className={classes.wrapForm} noValidate autoComplete="off">
+            <TextField
+              id="standard-text"
+              label="Escreve a tua mensagem"
+              className={classes.wrapText}
+              value={message.message}
+              onChange={(e) => setMessage({ ...message, message: e.target.value })}
+            />
+            <Button
+              variant="contained"
+              color="primary"
+              className={classes.button}
+              onClick={handleSendMessage}
+            >
+              <SendIcon />
+            </Button>
+          </form>
+        </Paper>
+      </div>
     </div>
   );
 }
