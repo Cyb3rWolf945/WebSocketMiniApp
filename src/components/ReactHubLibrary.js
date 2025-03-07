@@ -4,6 +4,7 @@ import * as signalR from "@microsoft/signalr";
 export default function ReactHubLibrary() {
     const [connection, setConnection] = useState(null);
     const [messages, setMessages] = useState([]);
+    const [input, setInput] = useState("");
 
     useEffect(() => {
         const newConnection = new signalR.HubConnectionBuilder()
@@ -35,11 +36,17 @@ export default function ReactHubLibrary() {
     }, [connection]);
 
 
-    return <>
+    return <div style={{border: "1px solid black", height: "80vh"}}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} />
+        <button onClick={ async()=>{
+            await connection.invoke("BroadCast", input);
+        }}>Clica em mim</button>
+
+        <p>Abaixo são apresentadas as mensagens</p>
         <ul>
             {messages.map((message, index) => (
                 <li key={index}>{message}</li>
             ))}
         </ul>
-    </>;
+    </div>;
 }
